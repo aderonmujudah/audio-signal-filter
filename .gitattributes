@@ -1,0 +1,7 @@
+# Keep repository line-endings consistent across platforms
+* text=auto eol=lf
+
+*.py text eol=lf
+*.m  text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
