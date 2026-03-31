@@ -62,9 +62,11 @@ def test_zcr_known_freq():
     signal    = make_sine(freq)
     z         = zcr(signal, SR, frame_sec=frame_sec)
 
-    expected  = 2 * freq * frame_sec        # = 0.022 crossings / sample
+    # crossings per frame ≈ 2*f*frame_sec, normalized by (frame_len - 1)
+    frame_len = int(round(frame_sec * SR))
+    expected  = (2 * freq * frame_sec) / (frame_len - 1)
     mean_z    = z[5:-5].mean()              # skip edge frames
-    assert abs(mean_z - expected) < 0.05, (
+    assert abs(mean_z - expected) < 0.005, (
         f"ZCR={mean_z:.4f}  expected~{expected:.4f}"
     )
     print(f"[PASS] ZCR theory  got={mean_z:.4f}  expected={expected:.4f}")

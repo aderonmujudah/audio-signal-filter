@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Filter</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0f1117;
+    --surface:  #1a1d27;
+    --border:   #2e3248;
+    --accent:   #6c8ef5;
+    --accent2:  #5dd6a8;
+    --text:     #dde1f0;
+    --muted:    #737a99;
+    --danger:   #f56c6c;
+    --radius:   8px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; }
+  header span { color: var(--muted); font-size: 12px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    padding: 20px 28px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* ── sidebar ── */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .card h2 { font-size: 12px; font-weight: 600; text-transform: uppercase;
+             letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 24px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(108,142,245,.06);
+  }
+  .drop-zone .icon { font-size: 28px; margin-bottom: 6px; }
+  .drop-zone p { color: var(--muted); font-size: 12px; }
+  .drop-zone strong { color: var(--text); }
+  #file-input { display: none; }
+
+  .file-info {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: rgba(108,142,245,.1);
+    border-radius: 5px;
+    font-size: 12px;
+    color: var(--accent);
+    display: none;
+  }
+
+  label.field-label {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    margin-top: 10px;
+  }
+  select, input[type=number] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 5px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  select:focus, input[type=number]:focus { outline: none; border-color: var(--accent); }
+
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 9px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s;
+    margin-top: 10px;
+  }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary  { background: var(--accent);  color: #fff; }
+  .btn-green    { background: var(--accent2); color: #0f1117; }
+  .btn-outline  { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn:not(:disabled):hover { opacity: .85; }
+
+  .spinner {
+    display: none;
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    margin: 8px auto 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box {
+    display: none;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(245,108,108,.12);
+    border-radius: 5px;
+    font-size: 12px;
+    color: var(--danger);
+  }
+
+  /* ── main panel ── */
+  .main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  .section-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+  }
+  .tab-btn {
+    padding: 7px 14px;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color .15s;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn:hover:not(.active) { color: var(--text); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── canvas charts ── */
+  .chart-wrap {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 12px 8px;
+  }
+  .chart-wrap h3 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  canvas { display: block; width: 100%; }
+
+  /* ── sources ── */
+  .source-grid { display: flex; flex-direction: column; gap: 10px; }
+  .source-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .source-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 64px;
+  }
+  audio { flex: 1; height: 32px; filter: invert(1) hue-rotate(180deg); }
+
+  /* ── diarization timeline ── */
+  .timeline-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    overflow-x: auto;
+  }
+  .timeline-wrap h3 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .timeline-bar { position: relative; height: 40px; background: var(--bg);
+                  border-radius: 4px; overflow: hidden; min-width: 300px; }
+  .seg {
+    position: absolute;
+    top: 0; height: 100%;
+    display: flex; align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    overflow: hidden;
+  }
+
+  .seg-legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .seg-legend-item {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--muted);
+  }
+  .seg-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  .segments-table {
+    margin-top: 12px;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .segments-table th {
+    color: var(--muted);
+    text-align: left;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+  }
+  .segments-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(46,50,72,.5);
+  }
+
+  .stat-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .stat {
+    flex: 1;
+    min-width: 80px;
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .stat .val { font-size: 18px; font-weight: 700; color: var(--accent); }
+  .stat .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+
+  .placeholder {
+    padding: 40px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div style="font-size:22px">🎙</div>
+  <h1>Audio Filter</h1>
+  <span>DSP analysis &amp; source separation</span>
+</header>
+
+<div class="layout">
+
+  <!-- ── sidebar ── -->
+  <aside class="sidebar">
+
+    <div class="card">
+      <h2>Input</h2>
+      <div class="drop-zone" id="drop-zone">
+        <div class="icon">📂</div>
+        <p><strong>Click to upload</strong> or drag &amp; drop</p>
+        <p>WAV file (mono or stereo)</p>
+        <input type="file" id="file-input" accept=".wav,audio/wav">
+      </div>
+      <div class="file-info" id="file-info"></div>
+      <div class="error-box" id="upload-error"></div>
+    </div>
+
+    <div class="card">
+      <h2>Analysis</h2>
+      <label class="field-label">MFCC coefficients</label>
+      <input type="number" id="n-mfcc" value="13" min="4" max="40">
+      <label class="field-label">F0 min (Hz)</label>
+      <input type="number" id="f0-min" value="60" min="40" max="200">
+      <label class="field-label">F0 max (Hz)</label>
+      <input type="number" id="f0-max" value="400" min="200" max="800">
+      <label class="field-label">Formants</label>
+      <input type="number" id="n-formants" value="4" min="1" max="8">
+      <button class="btn btn-primary" id="btn-analyze" disabled>Analyze</button>
+      <div class="spinner" id="spin-analyze"></div>
+      <div class="error-box" id="analyze-error"></div>
+    </div>
+
+    <div class="card">
+      <h2>Source Separation</h2>
+      <label class="field-label">Method</label>
+      <select id="sep-method">
+        <option value="auto">Auto (ICA if stereo, NMF if mono)</option>
+        <option value="nmf">NMF (mono)</option>
+        <option value="ica">ICA (multi-channel)</option>
+      </select>
+      <label class="field-label">NMF sources</label>
+      <input type="number" id="n-sources" value="2" min="1" max="8">
+      <label class="field-label">Griffin-Lim iterations</label>
+      <input type="number" id="gl-iter" value="64" min="4" max="256">
+      <button class="btn btn-green" id="btn-separate" disabled>Separate</button>
+      <div class="spinner" id="spin-separate"></div>
+      <div class="error-box" id="separate-error"></div>
+    </div>
+
+    <div class="card">
+      <h2>Diarization</h2>
+      <label class="field-label">Max speakers</label>
+      <input type="number" id="max-speakers" value="5" min="1" max="10">
+      <button class="btn btn-outline" id="btn-diarize" disabled>Diarize</button>
+      <div class="spinner" id="spin-diarize"></div>
+      <div class="error-box" id="diarize-error"></div>
+    </div>
+
+  </aside>
+
+  <!-- ── main ── -->
+  <main class="main">
+
+    <div class="section-tabs">
+      <button class="tab-btn active" data-tab="features">Features</button>
+      <button class="tab-btn" data-tab="separation">Sources</button>
+      <button class="tab-btn" data-tab="diarization">Diarization</button>
+    </div>
+
+    <!-- features tab -->
+    <div class="tab-panel active" id="tab-features">
+      <div id="features-placeholder" class="placeholder">
+        Upload a WAV file and click <strong>Analyze</strong> to see features.
+      </div>
+      <div id="features-content" style="display:none; display:flex; flex-direction:column; gap:14px;">
+        <div class="stat-row" id="info-stats"></div>
+        <div class="chart-wrap"><h3>Pitch (F0)</h3>
+          <canvas id="chart-pitch" height="80"></canvas></div>
+        <div class="chart-wrap"><h3>Energy &amp; ZCR</h3>
+          <canvas id="chart-energy" height="80"></canvas></div>
+        <div class="chart-wrap"><h3>Voice Activity</h3>
+          <canvas id="chart-vad" height="40"></canvas></div>
+        <div class="chart-wrap"><h3>MFCC Heatmap</h3>
+          <canvas id="chart-mfcc" height="120"></canvas></div>
+        <div class="chart-wrap"><h3>Formants (F1–F4)</h3>
+          <canvas id="chart-formants" height="90"></canvas></div>
+      </div>
+    </div>
+
+    <!-- separation tab -->
+    <div class="tab-panel" id="tab-separation">
+      <div id="sep-placeholder" class="placeholder">
+        Upload a WAV file and click <strong>Separate</strong> to extract sources.
+      </div>
+      <div id="sep-content" style="display:none">
+        <div class="source-grid" id="source-grid"></div>
+      </div>
+    </div>
+
+    <!-- diarization tab -->
+    <div class="tab-panel" id="tab-diarization">
+      <div id="diar-placeholder" class="placeholder">
+        Upload a WAV file and click <strong>Diarize</strong> for speaker segmentation.
+      </div>
+      <div id="diar-content" style="display:none">
+        <div class="timeline-wrap">
+          <h3>Speaker Timeline</h3>
+          <div class="timeline-bar" id="timeline-bar"></div>
+          <div class="seg-legend" id="seg-legend"></div>
+        </div>
+        <div class="timeline-wrap" style="margin-top:12px">
+          <table class="segments-table">
+            <thead><tr>
+              <th>#</th><th>Speaker</th><th>Start (s)</th><th>End (s)</th><th>Duration (s)</th>
+            </tr></thead>
+            <tbody id="seg-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+'use strict';
+
+// ── state ────────────────────────────────────────────────────────────────────
+let uploadedFile = null;
+
+// ── tab switching ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ── file upload ───────────────────────────────────────────────────────────────
+const dropZone   = document.getElementById('drop-zone');
+const fileInput  = document.getElementById('file-input');
+const fileInfo   = document.getElementById('file-info');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+function setFile(f) {
+  uploadedFile = f;
+  fileInfo.textContent = `${f.name}  (${(f.size / 1024).toFixed(1)} KB)`;
+  fileInfo.style.display = 'block';
+  ['btn-analyze','btn-separate','btn-diarize'].forEach(id =>
+    document.getElementById(id).disabled = false);
+  showError('upload-error', '');
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+function setSpin(id, on) {
+  document.getElementById(id).style.display = on ? 'block' : 'none';
+}
+function setBtn(id, disabled) {
+  document.getElementById(id).disabled = disabled;
+}
+
+async function postForm(url, formData) {
+  const r = await fetch(url, { method: 'POST', body: formData });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+// ── analyze ───────────────────────────────────────────────────────────────────
+document.getElementById('btn-analyze').addEventListener('click', async () => {
+  if (!uploadedFile) return;
+  showError('analyze-error', '');
+  setSpin('spin-analyze', true);
+  setBtn('btn-analyze', true);
+  try {
+    const fd = new FormData();
+    fd.append('file',        uploadedFile);
+    fd.append('n_mfcc',      document.getElementById('n-mfcc').value);
+    fd.append('f0_min',      document.getElementById('f0-min').value);
+    fd.append('f0_max',      document.getElementById('f0-max').value);
+    fd.append('n_formants',  document.getElementById('n-formants').value);
+    const data = await postForm('/analyze', fd);
+    renderFeatures(data);
+    // Switch to features tab
+    document.querySelector('[data-tab="features"]').click();
+  } catch(e) {
+    showError('analyze-error', e.message);
+  } finally {
+    setSpin('spin-analyze', false);
+    setBtn('btn-analyze', false);
+  }
+});
+
+// ── separate ──────────────────────────────────────────────────────────────────
+document.getElementById('btn-separate').addEventListener('click', async () => {
+  if (!uploadedFile) return;
+  showError('separate-error', '');
+  setSpin('spin-separate', true);
+  setBtn('btn-separate', true);
+  try {
+    const fd = new FormData();
+    fd.append('file',      uploadedFile);
+    fd.append('method',    document.getElementById('sep-method').value);
+    fd.append('n_sources', document.getElementById('n-sources').value);
+    fd.append('gl_iter',   document.getElementById('gl-iter').value);
+    const data = await postForm('/separate', fd);
+    renderSeparation(data);
+    document.querySelector('[data-tab="separation"]').click();
+  } catch(e) {
+    showError('separate-error', e.message);
+  } finally {
+    setSpin('spin-separate', false);
+    setBtn('btn-separate', false);
+  }
+});
+
+// ── diarize ───────────────────────────────────────────────────────────────────
+document.getElementById('btn-diarize').addEventListener('click', async () => {
+  if (!uploadedFile) return;
+  showError('diarize-error', '');
+  setSpin('spin-diarize', true);
+  setBtn('btn-diarize', true);
+  try {
+    const fd = new FormData();
+    fd.append('file',         uploadedFile);
+    fd.append('max_speakers', document.getElementById('max-speakers').value);
+    const data = await postForm('/diarize', fd);
+    renderDiarization(data);
+    document.querySelector('[data-tab="diarization"]').click();
+  } catch(e) {
+    showError('diarize-error', e.message);
+  } finally {
+    setSpin('spin-diarize', false);
+    setBtn('btn-diarize', false);
+  }
+});
+
+// ── canvas drawing utils ──────────────────────────────────────────────────────
+const COLORS = ['#6c8ef5','#5dd6a8','#f5a66c','#f56c9a','#b06cf5','#f5e26c','#6cf5e2','#f56c6c'];
+
+function resizeCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w   = canvas.parentElement.clientWidth - 24;  // padding
+  canvas.width  = w * dpr;
+  canvas.height = canvas.height * dpr;        // already set via HTML attr
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  canvas.style.height = (canvas.height / dpr) + 'px';
+  return ctx;
+}
+
+function drawLineChart(canvas, series, opts = {}) {
+  // series: [{values, color, label, yMin, yMax}]
+  const ctx   = resizeCanvas(canvas);
+  const W     = canvas.width  / (window.devicePixelRatio || 1);
+  const H     = canvas.height / (window.devicePixelRatio || 1);
+  const pad   = { top: 6, right: 8, bottom: 20, left: 48 };
+  const cw    = W - pad.left - pad.right;
+  const ch    = H - pad.top  - pad.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Compute global y range across all series
+  let allVals = series.flatMap(s => s.values.filter(v => v !== null && !isNaN(v)));
+  let yMin = opts.yMin !== undefined ? opts.yMin : Math.min(...allVals);
+  let yMax = opts.yMax !== undefined ? opts.yMax : Math.max(...allVals);
+  if (yMin === yMax) { yMin -= 1; yMax += 1; }
+
+  // Grid
+  ctx.strokeStyle = '#2e3248';
+  ctx.lineWidth   = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + ch * (1 - i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+    const val = yMin + (yMax - yMin) * (i / 4);
+    ctx.fillStyle = '#737a99'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(val.toFixed(0), pad.left - 4, y + 3);
+  }
+
+  // Series
+  series.forEach(s => {
+    const vals = s.values;
+    const n    = vals.length;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < n; i++) {
+      const v = vals[i];
+      if (v === null || isNaN(v)) { started = false; continue; }
+      const x = pad.left + cw * (i / (n - 1 || 1));
+      const y = pad.top  + ch * (1 - (v - yMin) / (yMax - yMin));
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+
+  // Legend
+  if (series.length > 1 || series[0]?.label) {
+    let lx = pad.left;
+    series.forEach(s => {
+      if (!s.label) return;
+      ctx.fillStyle = s.color;
+      ctx.fillRect(lx, H - 14, 10, 3);
+      ctx.fillStyle = '#737a99'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText(s.label, lx + 13, H - 11);
+      lx += ctx.measureText(s.label).width + 26;
+    });
+  }
+}
+
+function drawHeatmap(canvas, matrix) {
+  // matrix: (n_frames, n_coeff)
+  const ctx = resizeCanvas(canvas);
+  const W   = canvas.width  / (window.devicePixelRatio || 1);
+  const H   = canvas.height / (window.devicePixelRatio || 1);
+  ctx.clearRect(0, 0, W, H);
+  if (!matrix || matrix.length === 0) return;
+
+  const nf = matrix.length;
+  const nc = matrix[0].length;
+
+  // Flatten and find percentile range for color normalization
+  const flat = matrix.flat().filter(v => v !== null && !isNaN(v));
+  flat.sort((a, b) => a - b);
+  const lo = flat[Math.floor(flat.length * 0.02)] ?? 0;
+  const hi = flat[Math.floor(flat.length * 0.98)] ?? 1;
+  const range = hi - lo || 1;
+
+  const cw = W / nf;
+  const ch = H / nc;
+
+  for (let f = 0; f < nf; f++) {
+    for (let c = 0; c < nc; c++) {
+      const v  = matrix[f][c];
+      const t  = Math.max(0, Math.min(1, (v - lo) / range));
+      // Cool → warm colormap (dark blue → teal → yellow)
+      const r  = Math.round(Math.min(255, t * 2 * 255));
+      const g  = Math.round(Math.min(255, t * 2 * 200));
+      const b  = Math.round(Math.max(0, (1 - t) * 255));
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(f * cw, (nc - 1 - c) * ch, Math.ceil(cw), Math.ceil(ch));
+    }
+  }
+
+  // Y axis labels
+  ctx.fillStyle = '#737a99'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+  for (let c = 0; c < nc; c += 4) {
+    const y = (nc - 1 - c) * ch + ch / 2 + 3;
+    ctx.fillText(c + 1, 18, y);
+  }
+}
+
+function drawVAD(canvas, labels) {
+  const ctx = resizeCanvas(canvas);
+  const W   = canvas.width  / (window.devicePixelRatio || 1);
+  const H   = canvas.height / (window.devicePixelRatio || 1);
+  ctx.clearRect(0, 0, W, H);
+  const n   = labels.length;
+  const bw  = W / (n || 1);
+  const colors = { 0: '#1a1d27', 1: '#5dd6a8', 2: '#f5a66c' };
+  for (let i = 0; i < n; i++) {
+    ctx.fillStyle = colors[labels[i]] || '#333';
+    ctx.fillRect(i * bw, 0, Math.ceil(bw), H);
+  }
+  ctx.fillStyle = '#737a99'; ctx.font = '10px sans-serif';
+  ctx.textAlign = 'left';  ctx.fillText('Silence', 6, H - 6);
+  ctx.fillStyle = '#5dd6a8'; ctx.fillText('  Voiced', 48, H - 6);
+  ctx.fillStyle = '#f5a66c'; ctx.fillText('  Unvoiced', 100, H - 6);
+}
+
+// ── render features ───────────────────────────────────────────────────────────
+function renderFeatures(data) {
+  document.getElementById('features-placeholder').style.display = 'none';
+  const fc = document.getElementById('features-content');
+  fc.style.display = 'flex';
+
+  // Info stats
+  const voiced = data.pitch.f0.filter(v => v !== null).length;
+  const total  = data.pitch.f0.length;
+  document.getElementById('info-stats').innerHTML = `
+    <div class="stat"><div class="val">${data.info.sample_rate / 1000} kHz</div><div class="lbl">Sample Rate</div></div>
+    <div class="stat"><div class="val">${data.info.duration.toFixed(2)}s</div><div class="lbl">Duration</div></div>
+    <div class="stat"><div class="val">${data.info.n_channels}</div><div class="lbl">Channels</div></div>
+    <div class="stat"><div class="val">${total}</div><div class="lbl">Frames</div></div>
+    <div class="stat"><div class="val">${voiced}</div><div class="lbl">Voiced</div></div>
+  `;
+
+  // Pitch
+  drawLineChart(document.getElementById('chart-pitch'),
+    [{ values: data.pitch.f0, color: COLORS[0], label: 'F0 (Hz)' }],
+    { yMin: 0 });
+
+  // Energy + ZCR
+  const logE  = data.energy.log_rms;
+  const zcrV  = data.zcr.zcr;
+  const eMax  = Math.max(...logE.filter(v => v !== null && !isNaN(v)));
+  const eMin  = Math.min(...logE.filter(v => v !== null && !isNaN(v)));
+  // Scale ZCR to same y range for overlay
+  const zScaled = zcrV.map(v => v !== null ? eMin + v * (eMax - eMin) : null);
+  drawLineChart(document.getElementById('chart-energy'), [
+    { values: logE,    color: COLORS[0], label: 'Log Energy' },
+    { values: zScaled, color: COLORS[1], label: 'ZCR (scaled)' },
+  ]);
+
+  // VAD
+  drawVAD(document.getElementById('chart-vad'), data.vad.labels);
+
+  // MFCC heatmap
+  drawHeatmap(document.getElementById('chart-mfcc'), data.mfcc.coeffs);
+
+  // Formants
+  const nf = data.formants.freqs.length;
+  const formantSeries = [0,1,2,3].map(fi => ({
+    values: data.formants.freqs.map(row => (row && row[fi] !== null) ? row[fi] : null),
+    color:  COLORS[fi],
+    label:  `F${fi+1}`,
+  }));
+  drawLineChart(document.getElementById('chart-formants'), formantSeries, { yMin: 0, yMax: 4000 });
+}
+
+// ── render separation ─────────────────────────────────────────────────────────
+function renderSeparation(data) {
+  document.getElementById('sep-placeholder').style.display = 'none';
+  const grid = document.getElementById('source-grid');
+  grid.innerHTML = '';
+  data.sources.forEach((src, i) => {
+    const bytes = Uint8Array.from(atob(src.wav_b64), c => c.charCodeAt(0));
+    const blob  = new Blob([bytes], { type: 'audio/wav' });
+    const url   = URL.createObjectURL(blob);
+    const card  = document.createElement('div');
+    card.className = 'source-card';
+    card.innerHTML = `
+      <div class="source-label">Source ${i + 1}<br><span style="color:var(--muted);font-size:10px;font-weight:400">${data.method.toUpperCase()}</span></div>
+      <audio controls src="${url}"></audio>
+    `;
+    grid.appendChild(card);
+  });
+  document.getElementById('sep-content').style.display = 'block';
+}
+
+// ── render diarization ────────────────────────────────────────────────────────
+function renderDiarization(data) {
+  document.getElementById('diar-placeholder').style.display = 'none';
+  document.getElementById('diar-content').style.display = 'block';
+
+  const segs    = data.segments;
+  const k       = data.n_speakers;
+  const totalT  = segs.length ? segs[segs.length - 1].end : 1;
+  const spkColors = COLORS.slice(0, k);
+
+  // Timeline bar
+  const bar = document.getElementById('timeline-bar');
+  bar.innerHTML = '';
+  segs.forEach(seg => {
+    const left  = (seg.start / totalT * 100).toFixed(3) + '%';
+    const width = ((seg.end - seg.start) / totalT * 100).toFixed(3) + '%';
+    const col   = spkColors[seg.speaker % spkColors.length];
+    const el    = document.createElement('div');
+    el.className = 'seg';
+    el.style.cssText = `left:${left};width:${width};background:${col}22;border-left:2px solid ${col};color:${col}`;
+    el.title = `Speaker ${seg.speaker + 1}  ${seg.start.toFixed(2)}s – ${seg.end.toFixed(2)}s`;
+    if (parseFloat(width) > 3) el.textContent = `S${seg.speaker + 1}`;
+    bar.appendChild(el);
+  });
+
+  // Legend
+  const legend = document.getElementById('seg-legend');
+  legend.innerHTML = '';
+  for (let i = 0; i < k; i++) {
+    legend.innerHTML += `
+      <div class="seg-legend-item">
+        <div class="seg-legend-dot" style="background:${spkColors[i % spkColors.length]}"></div>
+        Speaker ${i + 1}
+      </div>`;
+  }
+
+  // Table
+  const tbody = document.getElementById('seg-table-body');
+  tbody.innerHTML = '';
+  segs.forEach((seg, idx) => {
+    const dur = (seg.end - seg.start).toFixed(2);
+    const col = spkColors[seg.speaker % spkColors.length];
+    tbody.innerHTML += `<tr>
+      <td style="color:var(--muted)">${idx + 1}</td>
+      <td style="color:${col};font-weight:600">Speaker ${seg.speaker + 1}</td>
+      <td>${seg.start.toFixed(3)}</td>
+      <td>${seg.end.toFixed(3)}</td>
+      <td>${dur}</td>
+    </tr>`;
+  });
+}
+
+// ── redraw on resize ──────────────────────────────────────────────────────────
+// (simple debounce — re-analyze result cached in DOM is not available,
+//  so we just re-render if data is present by triggering a no-op resize repaint)
+let _lastAnalyzeData = null;
+const _origRenderFeatures = renderFeatures;
+// shadow to cache
+window.addEventListener('resize', () => {
+  if (_lastAnalyzeData) renderFeatures(_lastAnalyzeData);
+});
+</script>
+</body>
+</html>
